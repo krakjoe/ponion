@@ -62,8 +62,9 @@ char *ponion_translate_path(const char *path TSRMLS_DC) {
 }
 
 int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) {
+	char qbuf[8192] = {0};
 	const char *path_translated = onion_request_get_path(req),
-               *query = onion_request_get_query(req, query);
+               *query = onion_request_get_query(req, qbuf);
 	const char *buffer = NULL;
 	onion_request_flags flags = onion_request_get_flags(req);
 	
