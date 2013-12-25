@@ -57,21 +57,24 @@ static inline void ponion_flush(void *context)  /* {{{ */
 	//fflush(PHPDBG_G(io)[PHPDBG_STDOUT]);
 } /* }}} */
 
+char *ponion_translate_path(const char *path TSRMLS_DC) {
+	return (char*)path;
+}
 
 int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) {
-	char *path_translated = onion_request_get_path(req);
-	char *query = ecalloc(1, 8192);
-	char *buffer = NULL;
+	const char *path_translated = onion_request_get_path(req),
+               *query = onion_request_get_query(req, query);
+	const char *buffer = NULL;
 	onion_request_flags flags = onion_request_get_flags(req);
 	
 	SG(sapi_headers).http_response_code = 200;
 	SG(request_info).request_method = flags & OR_GET ? "POST" : "GET";
-	SG(request_info).query_string = onion_request_get_query(req, query);
+	SG(request_info).query_string = query ? estrdup(query) : NULL;
 	
 	if (path_translated && *path_translated) {
 		SG(sapi_headers).http_response_code = 200;
-		SG(request_info).request_uri = path_translated;
-		SG(request_info).path_translated = estrdup(path_translated);
+		SG(request_info).request_uri = estrdup(path_translated);
+		SG(request_info).path_translated = ponion_translate_path(SG(request_info).request_uri TSRMLS_CC);
 
 		{
 			buffer = onion_request_get_query(req, "content-type");
@@ -227,8 +230,9 @@ static int php_sapi_ponion_send_headers(sapi_headers_struct *sapi_headers TSRMLS
 				const char *sep = strstr(header->header, ":");
 				
 				if (sep) {
-					while (isspace(sep++)) {
-						continue;
+					sep++;
+					while (isspace(*sep)) {
+						sep++;
 					}
 				}
 				
@@ -262,7 +266,7 @@ static void php_sapi_ponion_register_vars(zval *track_vars_array TSRMLS_DC) /* {
 	
 	php_import_environment_variables(track_vars_array TSRMLS_CC);
 	
-	path = onion_request_get_fullpath(context->req);
+	path = (char*) onion_request_get_fullpath(context->req);
 	len = strlen(path);
 	
 	if (sapi_module.input_filter(PARSE_SERVER, "PHP_SELF", &path, len, &len TSRMLS_CC)) {
@@ -335,13 +339,16 @@ const opt_struct OPTIONS[] = { /* {{{ */
 	{'d', 1, "define ini entry on command line"},
 	{'n', 0, "no php.ini"},
 	{'z', 1, "load zend_extension"},
+	{'p', 1, "port"},
+	{'a', 1, "address"},
+	{'t', 1, "timeout"},
 	{'-', 0, NULL}
 }; /* }}} */
 
 const char ponion_ini_hardcoded[] =
-"html_errors=Off\n"
-"register_argc_argv=On\n"
-"implicit_flush=On\n"
+"html_errors=On\n"
+"register_argc_argv=Off\n"
+"implicit_flush=Off\n"
 "display_errors=Off\n"
 "log_errors=On\n"
 "max_execution_time=0\n"
@@ -398,7 +405,8 @@ int main(int argc, char **argv){
 	char *ini_override;
 	char *php_optarg;
 	int php_optind, 
-		opt;
+		opt, timeout;
+	char *port, *address;
 
 #ifdef ZTS
 	void ***tsrm_ls;
@@ -427,6 +435,9 @@ ponion_enter:
 	php_optarg = NULL;
 	php_optind = 1;
 	opt = 0;
+	port = NULL;
+	timeout = 5000;
+	address = NULL;
 	
 	while ((opt = php_getopt(argc, argv, OPTIONS, &php_optarg, &php_optind, 0, 2)) != -1) {
 		switch (opt) {
@@ -476,9 +487,34 @@ ponion_enter:
 				} else zend_extensions = malloc(sizeof(char*) * zend_extensions_len);
 				zend_extensions[zend_extensions_len-1] = strdup(php_optarg);
 			break;
+			
+			case 'p':
+				if (port) {
+					free(port);
+				}
+				port = strdup(php_optarg);
+			break;
+			
+			case 't':
+				timeout = atoi(php_optarg);
+			break;
+			
+			case 'a':
+				if (address) {
+					free(address);
+				}
+				address = strdup(php_optarg);
+			break;
 
 		}
 	}
+	
+	if (!port)
+		port = strdup("12000");
+	if (timeout < -1)
+		timeout = 5000;
+	if (!address)
+		address = strdup("127.0.0.1");
 	
 	ponion->ini_defaults = ponion_ini_defaults;
 	ponion->phpinfo_as_text = 0;
@@ -555,10 +591,22 @@ ponion_enter:
 #else
 		o=onion_new(O_POOL);
 #endif
-		onion_set_timeout(o, 5000);
-		onion_set_port(o, "12000");
-		onion_set_hostname(o,"127.0.0.1");
-		onion_set_internal_error_handler(o, onion_error_handler);
+		
+		onion_set_timeout(o, timeout);
+		
+		onion_set_port(o, port);
+		free(port);
+		
+		onion_set_hostname(o, address);
+		free(address);
+		
+		{
+			onion_handler *ponion_error_handler = onion_handler_new(onion_error_handler, o, NULL);
+			
+			if (ponion_error_handler) {
+				onion_set_internal_error_handler(o, ponion_error_handler);
+			}
+		}
 		
 		{
 			onion_handler *ponion_handler = onion_handler_new(onion_request_handler, o, NULL);
