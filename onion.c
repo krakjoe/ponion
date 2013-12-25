@@ -90,7 +90,7 @@ int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) {
 		SG(request_info).path_translated = ponion_translate_path(SG(request_info).request_uri TSRMLS_CC);
 
 		{
-			buffer = onion_request_get_query(req, "content-type");
+			buffer = onion_request_get_header(req, "content-type");
 			if (buffer) {
 				SG(request_info).content_type = estrdup(buffer);
 			} else SG(request_info).content_type = NULL;
