@@ -62,15 +62,27 @@ char *ponion_translate_path(const char *path TSRMLS_DC) {
 }
 
 int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) {
-	char qbuf[8192] = {0};
-	const char *path_translated = onion_request_get_path(req),
-               *query = onion_request_get_query(req, qbuf);
+
+	const char *path_translated = onion_request_get_path(req);
 	const char *buffer = NULL;
 	onion_request_flags flags = onion_request_get_flags(req);
 	
 	SG(sapi_headers).http_response_code = 200;
-	SG(request_info).request_method = flags & OR_GET ? "POST" : "GET";
-	SG(request_info).query_string = query ? estrdup(query) : NULL;
+	
+	if (flags & OR_HEAD) {
+		SG(request_info).request_method = "HEAD";	
+	} else if (flags & OR_POST) {
+		SG(request_info).request_method = "POST";	
+	} else if (flags & OR_GET) {
+		SG(request_info).request_method = "GET";
+	} else if (flags & OR_PUT) {
+		SG(request_info).request_method = "PUT";
+	} else {
+		/* fallback on default for now */
+		SG(request_info).request_method = "GET";
+	}
+	
+	SG(request_info).query_string = NULL;
 	
 	if (path_translated && *path_translated) {
 		SG(sapi_headers).http_response_code = 200;
