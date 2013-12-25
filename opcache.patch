@@ -1,0 +1,12 @@
+diff --git a/ext/opcache/ZendAccelerator.c b/ext/opcache/ZendAccelerator.c
+index e6bc802..e544c84 100644
+--- a/ext/opcache/ZendAccelerator.c
++++ b/ext/opcache/ZendAccelerator.c
+@@ -2415,6 +2415,7 @@ static inline int accel_find_sapi(TSRMLS_D)
+ 		"apache2filter",
+ 		"apache2handler",
+ 		"litespeed",
++		"ponion",
+ 		NULL
+ 	};
+ 	const char **sapi_name;
