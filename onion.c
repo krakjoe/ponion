@@ -406,6 +406,10 @@ static void shutdown_server(int _){
 	
 	if (o) 
 		onion_listen_stop(o);
+	
+#ifdef ZTS
+	tsrm_shutdown();
+#endif
 }
 
 int main(int argc, char **argv){

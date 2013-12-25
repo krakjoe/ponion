@@ -48,7 +48,6 @@ if test "$PHP_ONION" != "no"; then
   
   PHP_SUBST(BUILD_BINARY_ONION)
   PHP_SUBST(BUILD_ONION)
-  PHP_BUILD_THREAD_SAFE
   
   AC_MSG_RESULT(yes)
 else
