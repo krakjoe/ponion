@@ -142,7 +142,9 @@ int onion_request_handler(void *p, onion_request *req, onion_response *res){
 
 			if (!file_handle.filename || retval == FAILURE) {
 				SG(sapi_headers).http_response_code = 404;
-				
+				onion_response_set_code(
+					res, SG(sapi_headers).http_response_code);
+				onion_response_write0(res, "Not Found");
 			} else {
 				php_execute_script(&file_handle TSRMLS_CC);
 			}
@@ -224,6 +226,12 @@ static int php_sapi_ponion_send_headers(sapi_headers_struct *sapi_headers TSRMLS
 			do {
 				const char *sep = strstr(header->header, ":");
 				
+				if (sep) {
+					while (isspace(sep++)) {
+						continue;
+					}
+				}
+				
 				onion_response_set_header(
 					context->res, 
 					header->header, sep ? sep + 1 : NULL);
@@ -248,26 +256,29 @@ static void php_sapi_ponion_register_vars(zval *track_vars_array TSRMLS_DC) /* {
 {
 	unsigned int len;
 	char   *docroot = "", 
-		   *index = estrdup("index.php");
+		   *path = NULL, *query = NULL;
+	
+	onion_context_t *context = SG(server_context);
 	
 	php_import_environment_variables(track_vars_array TSRMLS_CC);
-
-	len = strlen(index);
 	
-	if (sapi_module.input_filter(PARSE_SERVER, "PHP_SELF", &index, len, &len TSRMLS_CC)) {
-		php_register_variable("PHP_SELF", index, track_vars_array TSRMLS_CC);
+	path = onion_request_get_fullpath(context->req);
+	len = strlen(path);
+	
+	if (sapi_module.input_filter(PARSE_SERVER, "PHP_SELF", &path, len, &len TSRMLS_CC)) {
+		php_register_variable("PHP_SELF", path, track_vars_array TSRMLS_CC);
 	}
 	
-	if (sapi_module.input_filter(PARSE_SERVER, "SCRIPT_NAME", &index, len, &len TSRMLS_CC)) {
-		php_register_variable("SCRIPT_NAME", index, track_vars_array TSRMLS_CC);
+	if (sapi_module.input_filter(PARSE_SERVER, "SCRIPT_NAME", &path, len, &len TSRMLS_CC)) {
+		php_register_variable("SCRIPT_NAME", path, track_vars_array TSRMLS_CC);
 	}
 	
-	if (sapi_module.input_filter(PARSE_SERVER, "SCRIPT_FILENAME", &index, len, &len TSRMLS_CC)) {
-		php_register_variable("SCRIPT_FILENAME", index, track_vars_array TSRMLS_CC);
+	if (sapi_module.input_filter(PARSE_SERVER, "SCRIPT_FILENAME", &path, len, &len TSRMLS_CC)) {
+		php_register_variable("SCRIPT_FILENAME", path, track_vars_array TSRMLS_CC);
 	}
 	
-	if (sapi_module.input_filter(PARSE_SERVER, "PATH_TRANSLATED", &index, len, &len TSRMLS_CC)) {
-		php_register_variable("PATH_TRANSLATED", index, track_vars_array TSRMLS_CC);
+	if (sapi_module.input_filter(PARSE_SERVER, "PATH_TRANSLATED", &path, len, &len TSRMLS_CC)) {
+		php_register_variable("PATH_TRANSLATED", path, track_vars_array TSRMLS_CC);
 	}
 
 	len = strlen(docroot);
