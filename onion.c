@@ -17,6 +17,7 @@
 */
 #include <ponion.h>
 #include <onion/onion.h>
+#include <onion/handlers/exportlocal.h>
 #include <onion/request.h>
 #include <onion/types.h>
 #include <onion/types_internal.h>
@@ -58,16 +59,30 @@ static inline void ponion_flush(void *context)  /* {{{ */
 } /* }}} */
 
 char *ponion_translate_path(const char *path TSRMLS_DC) {
-	return (char*)path;
+	char *php = strstr(path, ".php");
+	
+	if (php) {
+		const char *end = &path[strlen(path)-1];
+		if (php + (strlen(php)-1) == end) {
+			printf(".php at end...%s\n", path);
+		} else printf("php not at end ...%s\n", path);
+		return (char*)path;
+	} else return NULL;
 }
 
 int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) {
 
-	const char *path_translated = onion_request_get_path(req);
+	const char *path = onion_request_get_path(req), 
+	           *path_translated = NULL;
 	const char *buffer = NULL;
-	onion_request_flags flags = onion_request_get_flags(req);
+	onion_request_flags flags;
 	
-	SG(sapi_headers).http_response_code = 200;
+	path_translated = ponion_translate_path(path TSRMLS_CC);
+	if (!path_translated) {
+		return FAILURE;
+	}
+	
+	flags = onion_request_get_flags(req);
 	
 	if (flags & OR_HEAD) {
 		SG(request_info).request_method = "HEAD";	
@@ -82,12 +97,13 @@ int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) {
 		SG(request_info).request_method = "GET";
 	}
 	
+	SG(sapi_headers).http_response_code = 200;
 	SG(request_info).query_string = NULL;
 	
 	if (path_translated && *path_translated) {
 		SG(sapi_headers).http_response_code = 200;
-		SG(request_info).request_uri = estrdup(path_translated);
-		SG(request_info).path_translated = ponion_translate_path(SG(request_info).request_uri TSRMLS_CC);
+		SG(request_info).request_uri = estrdup(path);
+		SG(request_info).path_translated = estrdup(path_translated);
 
 		{
 			buffer = onion_request_get_header(req, "content-type");
@@ -172,16 +188,18 @@ int onion_request_handler(void *p, onion_request *req, onion_response *res){
 				efree(SG(request_info).path_translated);
 		}
 	
-		php_request_shutdown(TSRMLS_C);	
+		php_request_shutdown(NULL);
+		
+		switch (SG(sapi_headers).http_response_code) {
+			case 500:
+				return OCS_INTERNAL_ERROR;
+			
+			default: 
+				return OCS_PROCESSED;
+		}	
 	}
 	
-	switch (SG(sapi_headers).http_response_code) {
-		case 500:
-			return OCS_INTERNAL_ERROR;
-			
-		default: 
-			return OCS_PROCESSED;
-	}
+	return OCS_NOT_PROCESSED;
 }
 
 int onion_error_handler(void *p, onion_request *req, onion_response *res) {
@@ -239,10 +257,12 @@ static int php_sapi_ponion_send_headers(sapi_headers_struct *sapi_headers TSRMLS
 	onion_context_t *context = (onion_context_t*) SG(server_context);
 	
 	onion_response_set_code(
-		context->res, SG(sapi_headers).http_response_code);
+		context->res, sapi_headers->http_response_code);
 	
 	{
-		sapi_header_struct *header = zend_llist_get_first(&sapi_headers->headers);
+		zend_llist_element *position;
+		sapi_header_struct *header = zend_llist_get_first_ex(&sapi_headers->headers, &position),
+						   *end = zend_llist_get_last(&sapi_headers->headers);
 		
 		if (header) {
 			do {
@@ -259,10 +279,10 @@ static int php_sapi_ponion_send_headers(sapi_headers_struct *sapi_headers TSRMLS
 					context->res, 
 					header->header, sep ? sep + 1 : NULL);
 				
-				if (header == zend_llist_get_last(&sapi_headers->headers)) {
+				if (header == end) {
 					break;
 				}
-			} while((header = zend_llist_get_next(&sapi_headers->headers)));
+			} while((header = zend_llist_get_next_ex(&sapi_headers->headers, &position)));
 		}
 	}
 	return SAPI_HEADER_SENT_SUCCESSFULLY;
@@ -288,8 +308,6 @@ static void php_sapi_ponion_register_vars(zval *track_vars_array TSRMLS_DC) /* {
 	path = (char*) onion_request_get_fullpath(context->req);
 	len = strlen(path);
 	
-	VCWD_GETCWD(docroot, MAXPATHLEN);
-	
 	if (sapi_module.input_filter(PARSE_SERVER, "PHP_SELF", &path, len, &len TSRMLS_CC)) {
 		php_register_variable("PHP_SELF", path, track_vars_array TSRMLS_CC);
 	}
@@ -306,8 +324,8 @@ static void php_sapi_ponion_register_vars(zval *track_vars_array TSRMLS_DC) /* {
 		php_register_variable("PATH_TRANSLATED", path, track_vars_array TSRMLS_CC);
 	}
 
-	len = strlen(docroot);
-	if (len) {
+	VCWD_GETCWD(docroot, MAXPATHLEN);
+	if ((len = strlen(docroot))) {
 		char *document_root = estrndup(docroot, len);
 		
 		if (sapi_module.input_filter(PARSE_SERVER, "DOCUMENT_ROOT",
@@ -316,6 +334,7 @@ static void php_sapi_ponion_register_vars(zval *track_vars_array TSRMLS_DC) /* {
 		}
 	}
 
+	/* really ? */
 	php_register_variable("GATEWAY_INTERFACE", "CGI/1.1", track_vars_array TSRMLS_CC);
 }
 /* }}} */
@@ -705,6 +724,9 @@ ponion_enter:
 			onion_handler *ponion_handler = onion_handler_new(onion_request_handler, o, NULL);
 			
 			if (ponion_handler) {
+				//onion_handler_add(
+				//	ponion_handler, onion_handler_export_local_new("."));
+				
 				onion_set_root_handler(o, ponion_handler);
 			}
 		}

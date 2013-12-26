@@ -32,6 +32,7 @@ if test "$PHP_ONION" != "no"; then
   PHP_SUBST(PHP_ONION_LIBS)
   
   PHP_ADD_MAKEFILE_FRAGMENT([$abs_srcdir/sapi/onion/Makefile.frag])
+  
   PHP_ADD_INCLUDE(ONION_INCLUDE)
   PHP_SELECT_SAPI(onion, program, "onion.c", $PHP_ONION_CFLAGS, [$(SAPI_ONION_PATH)])
   
