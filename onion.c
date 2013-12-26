@@ -749,8 +749,8 @@ ponion_enter:
 			onion_handler *ponion_handler = onion_handler_new(onion_request_handler, o, NULL);
 			
 			if (ponion_handler) {
-				//onion_handler_add(
-				//	ponion_handler, onion_handler_export_local_new("."));
+				onion_handler_add(
+					ponion_handler, onion_handler_export_local_new("."));
 				
 				onion_set_root_handler(o, ponion_handler);
 			}

@@ -25,7 +25,7 @@ if test "$PHP_ONION" != "no"; then
   
   PHP_ONION_CFLAGS="-DGNU_SOURCE -I$ONION_INCLUDE"
   PHP_ONION_FILES="onion.c"
-  PHP_ONION_LIBS="-lonion"
+  PHP_ONION_LIBS="-lpthread -lonion -lonion_handlers"
   
   PHP_SUBST(PHP_ONION_CFLAGS)
   PHP_SUBST(PHP_ONION_FILES)
