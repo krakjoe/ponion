@@ -20,3 +20,25 @@ ponion (0.0.1) (built: Dec 26 2013 09:36:48)
 onion is a rather cool HTTP and TCP server creation library: https://github.com/davidmoreno/onion/
 
 PHP is everything else: http://php.net
+
+```
+Server Software:        libonion
+Server Hostname:        127.0.0.1
+Server Port:            12000
+
+Document Path:          /
+Document Length:        2558 bytes
+
+Concurrency Level:      5
+Time taken for tests:   1.502 seconds
+Complete requests:      1000
+Failed requests:        0
+Write errors:           0
+Total transferred:      2697000 bytes
+HTML transferred:       2558000 bytes
+Requests per second:    665.67 [#/sec] (mean)
+Time per request:       7.511 [ms] (mean)
+Time per request:       1.502 [ms] (mean, across all concurrent requests)
+```
+
+Above is a twitter/bootstrap based bare minimum Silex application using twig based templates, Apache (nts) got to around 35
