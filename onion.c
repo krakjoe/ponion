@@ -720,9 +720,7 @@ ponion_enter:
 	}
 
 quit:
-#ifdef ZTS
 	tsrm_shutdown();
-#endif
 
 	return 0;
 }
