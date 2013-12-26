@@ -45,17 +45,18 @@ static inline int ponion_ub_write(const char *message, unsigned int length TSRML
 	return FAILURE;
 } /* }}} */
 
-
 #if PHP_VERSION_ID >= 50700
 static inline void ponion_flush(void *context TSRMLS_DC)  /* {{{ */
 {
 #else
 static inline void ponion_flush(void *context)  /* {{{ */
 {
-	//TSRMLS_FETCH();
 #endif
 
-	//fflush(PHPDBG_G(io)[PHPDBG_STDOUT]);
+	onion_context_t *ctx = (onion_context_t*) context;
+	if (ctx) {
+		onion_response_flush(ctx->res);	
+	}
 } /* }}} */
 
 char *ponion_translate_path(const char *path TSRMLS_DC) {
