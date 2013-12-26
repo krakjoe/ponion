@@ -24,6 +24,7 @@
 #include <onion/log.h>
 #include <signal.h>
 #include <netdb.h>
+#include <ext/standard/php_smart_str.h>
 
 ZEND_DECLARE_MODULE_GLOBALS(ponion);
 
@@ -127,6 +128,37 @@ static inline char *ponion_init_method(onion_request_flags flags TSRMLS_DC) { /*
 	}
 } /* }}} */
 
+typedef struct _ponion_string_t {
+	size_t len;
+	char *str;
+} ponion_string_t;
+
+static void ponion_build_query(void *context, const char *key, const char *value, int flags) {
+	ponion_string_t *string = (ponion_string_t*) context;
+	size_t lengths[3] = {
+		strlen(key), 
+		strlen(value),
+		lengths[0]+lengths[1]+1};
+	char *pointer = NULL;
+	
+	if (!string->len) {
+		string->str = malloc(lengths[2]+1);
+	} else string->str = realloc(string->str, string->len + lengths[2]+2);
+	
+	pointer = &string->str[string->len];
+	
+	if (string->len) {
+		memcpy(
+			pointer++, "&", sizeof("&")-1);
+	}
+	
+	memcpy(pointer, key, lengths[0]);
+	memcpy(&pointer[lengths[0]], "=", (sizeof("=")-1));
+	memcpy(&pointer[lengths[0] + (sizeof("=")-1)], value, lengths[1]);
+	
+	string->len += strlen(pointer);
+}
+
 int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) { /* {{{ */
 
 	const char *path = onion_request_get_path(req), 
@@ -140,13 +172,25 @@ int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) { /* 
 	}
 	
 	flags = onion_request_get_flags(req);
-	
+
 	SG(request_info).request_method = ponion_init_method(flags TSRMLS_CC);
-	SG(request_info).query_string = NULL;
 	SG(request_info).auth_user = NULL;
 	SG(request_info).auth_password = NULL;
 	SG(request_info).auth_digest = NULL;	
 
+	{
+		ponion_string_t buffer = {0, NULL};
+		onion_dict_preorder(
+			req->GET,
+			ponion_build_query,
+			&buffer);
+		if (buffer.len) {
+			SG(request_info).query_string = estrndup(
+				buffer.str, buffer.len);
+			free(buffer.str);
+		} else SG(request_info).query_string = NULL;
+	}
+	
 	if (SG(request_info).request_method && 
 		path_translated && *path_translated) {
 		SG(sapi_headers).http_response_code = 200;
