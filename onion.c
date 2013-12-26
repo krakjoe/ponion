@@ -272,7 +272,7 @@ static void php_sapi_ponion_send_header(sapi_header_struct *sapi_header, void *s
 static void php_sapi_ponion_register_vars(zval *track_vars_array TSRMLS_DC) /* {{{ */
 {
 	unsigned int len;
-	char   *docroot = "", 
+	char   docroot[MAXPATHLEN], 
 		   *path = NULL, *query = NULL;
 	
 	onion_context_t *context = SG(server_context);
@@ -281,6 +281,10 @@ static void php_sapi_ponion_register_vars(zval *track_vars_array TSRMLS_DC) /* {
 	
 	path = (char*) onion_request_get_fullpath(context->req);
 	len = strlen(path);
+	
+	if (!VCWD_GETCWD(docroot, MAXPATHLEN)) {
+		memcpy(docroot, "", sizeof(""));
+	}
 	
 	if (sapi_module.input_filter(PARSE_SERVER, "PHP_SELF", &path, len, &len TSRMLS_CC)) {
 		php_register_variable("PHP_SELF", path, track_vars_array TSRMLS_CC);
@@ -300,7 +304,7 @@ static void php_sapi_ponion_register_vars(zval *track_vars_array TSRMLS_DC) /* {
 
 	len = strlen(docroot);
 	if (sapi_module.input_filter(PARSE_SERVER, "DOCUMENT_ROOT",
-				&docroot, len, &len TSRMLS_CC)) {
+				(char**) &docroot, len, &len TSRMLS_CC)) {
 		php_register_variable("DOCUMENT_ROOT", docroot, track_vars_array TSRMLS_CC);
 	}
 	
@@ -348,13 +352,18 @@ static sapi_module_struct ponion_sapi_module = {
 /* }}} */
 
 const opt_struct OPTIONS[] = { /* {{{ */
-	{'c', 1, "ini path override"},
-	{'d', 1, "define ini entry on command line"},
-	{'n', 0, "no php.ini"},
-	{'z', 1, "load zend_extension"},
-	{'p', 1, "port"},
-	{'a', 1, "address"},
-	{'t', 1, "timeout"},
+	{'h', 0, "show this help menu"},
+	{'n', 0, "do not load any php.ini file"},
+	{'c', 1, "load a specific php.ini file, -c/my/php.ini"},
+	{'d', 1, "define ini entry on command line, -dmemory_limit=4G"},
+	{'z', 1, "load zend_extension, -z/path/to/zendext.so"},
+	{'p', 1, "sets the listening port to accept connections, -p12000"},
+	{'a', 1, "set the interface address to bind too, -a127.0.0.1"},
+	{'t', 1, "set the socket timeout in milliseconds, -t5000"},
+	{'D', 1, "set the document root (chdir), -D."},
+#ifdef ZTS
+	{'T', 1, "set the maximum number of threads, -T16"},
+#endif
 	{'-', 0, NULL}
 }; /* }}} */
 
@@ -406,10 +415,36 @@ static void shutdown_server(int _){
 	
 	if (o) 
 		onion_listen_stop(o);
-	
+
 #ifdef ZTS
 	tsrm_shutdown();
 #endif
+}
+
+static inline void ponion_help(TSRMLS_D) {
+	const opt_struct *opt = OPTIONS;
+	
+	printf(
+		"%s (%s) (built: %s %s)\n", 
+		PONION_NAME, PONION_VERSION,
+		__DATE__, __TIME__);
+	
+	for (;;) {
+		switch (opt->opt_char) {
+			case '-':
+				goto done;
+				
+			default:
+				printf(
+					"\t-%c\t\t%s\n", 
+					opt->opt_char, 
+					opt->opt_name);
+				
+		}
+		opt++;
+	}
+done:
+	return;
 }
 
 int main(int argc, char **argv){
@@ -421,9 +456,13 @@ int main(int argc, char **argv){
 	zend_bool ini_ignore;
 	char *ini_override;
 	char *php_optarg;
-	int php_optind, 
-		opt, timeout;
-	char *port, *address;
+	int php_optind,
+		opt,
+		timeout,
+		threads;
+	char *port,
+	     *address,
+	     *docroot;
 
 #ifdef ZTS
 	void ***tsrm_ls;
@@ -455,9 +494,15 @@ ponion_enter:
 	port = NULL;
 	timeout = 5000;
 	address = NULL;
+	threads = 16;
+	docroot = NULL;
 	
 	while ((opt = php_getopt(argc, argv, OPTIONS, &php_optarg, &php_optind, 0, 2)) != -1) {
 		switch (opt) {
+			case 'h':
+				ponion_help(TSRMLS_C);
+				goto quit;	
+
 			case 'n':
 				ini_ignore = 1;
 				break;
@@ -522,6 +567,19 @@ ponion_enter:
 				}
 				address = strdup(php_optarg);
 			break;
+			
+			case 'D':
+				if (docroot) {
+					free(docroot);
+				}
+				docroot = strdup(php_optarg);
+			break;
+			
+#ifdef ZTS
+			case 'T':
+				threads = atoi(php_optarg);
+			break;
+#endif
 
 		}
 	}
@@ -532,6 +590,14 @@ ponion_enter:
 		timeout = 5000;
 	if (!address)
 		address = strdup("127.0.0.1");
+	if (docroot) {
+		if (chdir(docroot) != SUCCESS) {
+			ONION_ERROR("could not change into %s\n", docroot);
+			free(docroot);
+			goto quit;
+		}
+		free(docroot);
+	}
 	
 	ponion->ini_defaults = ponion_ini_defaults;
 	ponion->phpinfo_as_text = 0;
@@ -605,10 +671,12 @@ ponion_enter:
 
 #ifdef ZTS
 		o=onion_new(O_POOL|O_THREADED);
+		
+		onion_set_max_threads(o, threads);
 #else
 		o=onion_new(O_POOL);
 #endif
-		
+
 		onion_set_timeout(o, timeout);
 		
 		onion_set_port(o, port);
@@ -635,6 +703,11 @@ ponion_enter:
 		
 		onion_listen(o);
 	}
-	
+
+quit:
+#ifdef ZTS
+	tsrm_shutdown();
+#endif
+
 	return 0;
 }
