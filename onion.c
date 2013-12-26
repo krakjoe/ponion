@@ -88,6 +88,37 @@ char *ponion_translate_path(const char *path TSRMLS_DC) {
 	return NULL;
 }
 
+static inline char *ponion_init_method(onion_request_flags flags TSRMLS_DC) {
+
+	switch (flags & OR_METHODS) {
+		case OR_GET:
+			return "GET";
+		case OR_POST:
+			return "POST";
+		case OR_HEAD:
+			return "HEAD";
+		case OR_OPTIONS:
+			return "OPTIONS";
+		case OR_PROPFIND:
+			return "PROPFIND";
+		case OR_PUT:
+			return "PUT";
+		case OR_DELETE:
+			return "DELETE";
+		case OR_MOVE:
+			return "MOVE";
+		case OR_MKCOL:
+			return "MKCOL";
+		case OR_PROPPATCH:
+			return "PROPPATCH";
+		case OR_PATCH:
+			return "PATCH";	
+		
+		default:
+			return NULL;
+	}
+}
+
 int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) {
 
 	const char *path = onion_request_get_path(req), 
@@ -102,25 +133,11 @@ int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) {
 	
 	flags = onion_request_get_flags(req);
 	
-	if (flags & OR_HEAD) {
-		SG(request_info).request_method = "HEAD";	
-	} else if (flags & OR_POST) {
-		SG(request_info).request_method = "POST";	
-	} else if (flags & OR_GET) {
-		SG(request_info).request_method = "GET";
-	} else if (flags & OR_PUT) {
-		SG(request_info).request_method = "PUT";
-	}  else if (flags & OR_PATCH) {
-		SG(request_info).request_method = "PATCH";
-	} else {
-		/* fallback on default for now */
-		SG(request_info).request_method = "GET";
-	}
-	
-	SG(sapi_headers).http_response_code = 200;
+	SG(request_info).request_method = ponion_init_method(flags TSRMLS_CC);
 	SG(request_info).query_string = NULL;
 	
-	if (path_translated && *path_translated) {
+	if (SG(request_info).request_method && 
+		path_translated && *path_translated) {
 		SG(sapi_headers).http_response_code = 200;
 		SG(request_info).request_uri = estrdup(path);
 		SG(request_info).path_translated = estrdup(path_translated);
