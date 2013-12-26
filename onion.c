@@ -63,11 +63,12 @@ char *ponion_translate_path(const char *path TSRMLS_DC) {
 	
 	if (php) {
 		const char *end = &path[strlen(path)-1];
+		/* ensure this is a php script */
 		if (php + (strlen(php)-1) == end) {
-			printf(".php at end...%s\n", path);
-		} else printf("php not at end ...%s\n", path);
-		return (char*)path;
-	} else return NULL;
+			return path;
+		}
+	}
+	return NULL;
 }
 
 int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) {
@@ -187,8 +188,8 @@ int onion_request_handler(void *p, onion_request *req, onion_response *res){
 			if (SG(request_info).path_translated)
 				efree(SG(request_info).path_translated);
 		}
-	
-		php_request_shutdown(NULL);
+
+		php_request_shutdown(TSRMLS_C);
 		
 		switch (SG(sapi_headers).http_response_code) {
 			case 500:
@@ -388,9 +389,7 @@ const opt_struct OPTIONS[] = { /* {{{ */
 	{'a', 1, "set the interface address to bind too, -a127.0.0.1"},
 	{'t', 1, "set the socket timeout in milliseconds, -t5000"},
 	{'D', 1, "set the document root (chdir), -D."},
-#ifdef ZTS
 	{'T', 1, "set the maximum number of threads, -T16"},
-#endif
 	{'-', 0, NULL}
 }; /* }}} */
 
@@ -443,9 +442,7 @@ static void shutdown_server(int _){
 	if (o) 
 		onion_listen_stop(o);
 
-#ifdef ZTS
 	tsrm_shutdown();
-#endif
 }
 
 static inline void ponion_help(TSRMLS_D) {
@@ -490,10 +487,7 @@ int main(int argc, char **argv){
 	char *port,
 	     *address,
 	     *docroot;
-
-#ifdef ZTS
 	void ***tsrm_ls;
-#endif
 
 #ifdef PHP_WIN32
 	_fmode = _O_BINARY;                 /* sets default for file streams to binary */
@@ -502,11 +496,9 @@ int main(int argc, char **argv){
 	setmode(_fileno(stderr), O_BINARY); /* make the stdio mode be binary */
 #endif
 
-#ifdef ZTS
 	tsrm_startup(1, 1, 0, NULL);
 
 	tsrm_ls = ts_resource(0);
-#endif
 
 ponion_enter:
 	ini_entries = NULL;
@@ -602,12 +594,9 @@ ponion_enter:
 				docroot = strdup(php_optarg);
 			break;
 			
-#ifdef ZTS
 			case 'T':
 				threads = atoi(php_optarg);
 			break;
-#endif
-
 		}
 	}
 	
