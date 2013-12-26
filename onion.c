@@ -685,14 +685,10 @@ ponion_enter:
 #endif
 #endif
 
-#ifdef ZTS
 		o=onion_new(O_POOL|O_THREADED);
 		
 		onion_set_max_threads(o, threads);
-#else
-		o=onion_new(O_POOL);
-#endif
-
+		
 		onion_set_timeout(o, timeout);
 		
 		onion_set_port(o, port);
