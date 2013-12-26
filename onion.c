@@ -718,7 +718,7 @@ ponion_enter:
 #endif
 #endif
 
-		o=onion_new(O_POOL|O_THREADED);
+		o=onion_new(O_POLL|O_POOL|O_THREADED);
 		
 		if (cert && key) {
 			onion_set_certificate(
