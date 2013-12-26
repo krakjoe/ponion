@@ -110,6 +110,8 @@ int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) {
 		SG(request_info).request_method = "GET";
 	} else if (flags & OR_PUT) {
 		SG(request_info).request_method = "PUT";
+	}  else if (flags & OR_PATCH) {
+		SG(request_info).request_method = "PATCH";
 	} else {
 		/* fallback on default for now */
 		SG(request_info).request_method = "GET";
