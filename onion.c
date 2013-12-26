@@ -60,15 +60,31 @@ static inline void ponion_flush(void *context)  /* {{{ */
 } /* }}} */
 
 char *ponion_translate_path(const char *path TSRMLS_DC) {
-	char *php = strstr(path, ".php");
-	
-	if (php) {
-		const char *end = &path[strlen(path)-1];
-		/* ensure this is a php script */
-		if (php + (strlen(php)-1) == end) {
-			return (char*)path;
+	if (path && *path) {
+		size_t path_len = strlen(path);
+		
+		if (path_len > 0L) {
+			const char *end = &path[path_len - 1];
+			
+			{
+				char *php = strstr(path, ".php");
+				if (php) {
+					/* ensure this is a php script */
+					if (php + (strlen(php)-1) == end) {
+						return strdup((char*)path);
+					}
+				}
+			}
+		}
+	} else {
+		/* auto index */
+		struct stat sb;
+		
+		if (stat("index.php", &sb) == SUCCESS) {
+			return "index.php";
 		}
 	}
+	
 	return NULL;
 }
 
