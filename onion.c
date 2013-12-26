@@ -65,7 +65,7 @@ char *ponion_translate_path(const char *path TSRMLS_DC) {
 		const char *end = &path[strlen(path)-1];
 		/* ensure this is a php script */
 		if (php + (strlen(php)-1) == end) {
-			return path;
+			return (char*)path;
 		}
 	}
 	return NULL;
