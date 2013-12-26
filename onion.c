@@ -143,35 +143,28 @@ int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) { /* 
 	
 	SG(request_info).request_method = ponion_init_method(flags TSRMLS_CC);
 	SG(request_info).query_string = NULL;
-	
+	SG(request_info).auth_user = NULL;
+	SG(request_info).auth_password = NULL;
+	SG(request_info).auth_digest = NULL;	
+
 	if (SG(request_info).request_method && 
 		path_translated && *path_translated) {
 		SG(sapi_headers).http_response_code = 200;
 		SG(request_info).request_uri = estrdup(path);
 		SG(request_info).path_translated = estrdup(path_translated);
 
-		{
-			buffer = onion_request_get_header(req, "content-type");
-			if (buffer) {
-				SG(request_info).content_type = estrdup(buffer);
-			} else SG(request_info).content_type = NULL;
+		buffer = onion_request_get_header(req, "content-type");
+		if (buffer) {
+			SG(request_info).content_type = estrdup(buffer);
+		} else {
+			SG(request_info).content_type = NULL;
 		}
 	
-		{
-			buffer = onion_request_get_header(req, "content-length");
-			if (buffer) {
-				SG(request_info).content_length = strtol(buffer, 0, 10);
-			} else SG(request_info).content_length = 0;
-		}
-
-		SG(request_info).auth_user = NULL;
-		SG(request_info).auth_password = NULL;
-		SG(request_info).auth_digest = NULL;
-		
-		if (strstr(SG(request_info).path_translated,"..")) {
-			SG(sapi_headers).http_response_code = 403;
-			efree(SG(request_info).path_translated);
-			SG(request_info).path_translated = NULL;
+		buffer = onion_request_get_header(req, "content-length");
+		if (buffer) {
+			SG(request_info).content_length = strtol(buffer, 0, 10);
+		} else {
+			SG(request_info).content_length = 0;
 		}
 	} else {
 		SG(request_info).path_translated = NULL;
