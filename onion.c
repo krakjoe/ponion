@@ -175,7 +175,13 @@ int onion_request_handler(void *p, onion_request *req, onion_response *res){
 		php_request_shutdown(TSRMLS_C);	
 	}
 	
-	return OCS_PROCESSED;
+	switch (SG(sapi_headers).http_response_code) {
+		case 500:
+			return OCS_INTERNAL_ERROR;
+			
+		default: 
+			return OCS_PROCESSED;
+	}
 }
 
 int onion_error_handler(void *p, onion_request *req, onion_response *res) {
@@ -282,9 +288,7 @@ static void php_sapi_ponion_register_vars(zval *track_vars_array TSRMLS_DC) /* {
 	path = (char*) onion_request_get_fullpath(context->req);
 	len = strlen(path);
 	
-	if (!VCWD_GETCWD(docroot, MAXPATHLEN)) {
-		memcpy(docroot, "", sizeof(""));
-	}
+	VCWD_GETCWD(docroot, MAXPATHLEN);
 	
 	if (sapi_module.input_filter(PARSE_SERVER, "PHP_SELF", &path, len, &len TSRMLS_CC)) {
 		php_register_variable("PHP_SELF", path, track_vars_array TSRMLS_CC);
@@ -303,11 +307,15 @@ static void php_sapi_ponion_register_vars(zval *track_vars_array TSRMLS_DC) /* {
 	}
 
 	len = strlen(docroot);
-	if (sapi_module.input_filter(PARSE_SERVER, "DOCUMENT_ROOT",
-				(char**) &docroot, len, &len TSRMLS_CC)) {
-		php_register_variable("DOCUMENT_ROOT", docroot, track_vars_array TSRMLS_CC);
+	if (len) {
+		char *document_root = estrndup(docroot, len);
+		
+		if (sapi_module.input_filter(PARSE_SERVER, "DOCUMENT_ROOT",
+					(char**) &document_root, len, &len TSRMLS_CC)) {
+			php_register_variable("DOCUMENT_ROOT", document_root, track_vars_array TSRMLS_CC);
+		}
 	}
-	
+
 	php_register_variable("GATEWAY_INTERFACE", "CGI/1.1", track_vars_array TSRMLS_CC);
 }
 /* }}} */
