@@ -59,7 +59,9 @@ static inline void ponion_flush(void *context)  /* {{{ */
 	}
 } /* }}} */
 
-char *ponion_translate_path(const char *path TSRMLS_DC) {
+char *ponion_translate_path(const char *path TSRMLS_DC) { /* {{{ */
+	char *translated = NULL;
+	
 	if (path && *path) {
 		size_t path_len = strlen(path);
 		
@@ -71,7 +73,7 @@ char *ponion_translate_path(const char *path TSRMLS_DC) {
 				if (php) {
 					/* ensure this is a php script */
 					if (php + (strlen(php)-1) == end) {
-						return strdup((char*)path);
+						translated = strdup((char*)path);
 					}
 				}
 			}
@@ -81,14 +83,20 @@ char *ponion_translate_path(const char *path TSRMLS_DC) {
 		struct stat sb;
 		
 		if (stat("index.php", &sb) == SUCCESS) {
-			return "index.php";
+			translated = "index.php";
 		}
 	}
 	
-	return NULL;
-}
+	/* don't allow insecure, silly paths */
+	if (translated && 
+		(strstr(translated, "..") != NULL)) {
+		translated = NULL;
+	}
+	
+	return translated;
+} /* }}} */
 
-static inline char *ponion_init_method(onion_request_flags flags TSRMLS_DC) {
+static inline char *ponion_init_method(onion_request_flags flags TSRMLS_DC) { /* {{{ */
 
 	switch (flags & OR_METHODS) {
 		case OR_GET:
@@ -117,9 +125,9 @@ static inline char *ponion_init_method(onion_request_flags flags TSRMLS_DC) {
 		default:
 			return NULL;
 	}
-}
+} /* }}} */
 
-int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) {
+int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) { /* {{{ */
 
 	const char *path = onion_request_get_path(req), 
 	           *path_translated = NULL;
@@ -186,11 +194,9 @@ int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) {
 	}
 	
 	return SUCCESS;
-}
+} /* }}} */
 
-
-
-int onion_request_handler(void *p, onion_request *req, onion_response *res){
+int onion_request_handler(void *p, onion_request *req, onion_response *res){ /* {{{ */
 	TSRMLS_FETCH();
 	int status = 200;
 	
@@ -237,12 +243,12 @@ int onion_request_handler(void *p, onion_request *req, onion_response *res){
 	}
 	
 	return OCS_NOT_PROCESSED;
-}
+} /* }}} */
 
-int onion_error_handler(void *p, onion_request *req, onion_response *res) {
+int onion_error_handler(void *p, onion_request *req, onion_response *res) { /* {{{ */
 	onion_response_write0(res,"Error world");
 	return OCS_PROCESSED;
-}
+} /* }}} */
 
 /* {{{ */
 static zend_module_entry ponion_sapi_zend_module = {
