@@ -390,6 +390,8 @@ const opt_struct OPTIONS[] = { /* {{{ */
 	{'t', 1, "set the socket timeout in milliseconds, -t5000"},
 	{'D', 1, "set the document root (chdir), -D."},
 	{'T', 1, "set the maximum number of threads, -T16"},
+	{'K', 1, "set the SSL key, -K/path/to/cert.key"},
+	{'C', 1, "set the SSL certification, -C/path/to/cert.pem"},
 	{'-', 0, NULL}
 }; /* }}} */
 
@@ -486,7 +488,9 @@ int main(int argc, char **argv){
 		threads;
 	char *port,
 	     *address,
-	     *docroot;
+	     *docroot,
+	     *cert,
+	     *key;
 	void ***tsrm_ls;
 
 #ifdef PHP_WIN32
@@ -515,6 +519,8 @@ ponion_enter:
 	address = NULL;
 	threads = 16;
 	docroot = NULL;
+	cert = NULL;
+	key = NULL;
 	
 	while ((opt = php_getopt(argc, argv, OPTIONS, &php_optarg, &php_optind, 0, 2)) != -1) {
 		switch (opt) {
@@ -597,6 +603,20 @@ ponion_enter:
 			case 'T':
 				threads = atoi(php_optarg);
 			break;
+			
+			case 'K':
+				if (key) {
+					free(key);
+				}
+				key = strdup(php_optarg);
+			break;
+			
+			case 'C':
+				if (cert) {
+					free(cert);
+				}
+				cert = strdup(php_optarg);
+			break;
 		}
 	}
 	
@@ -608,11 +628,23 @@ ponion_enter:
 		address = strdup("127.0.0.1");
 	if (docroot) {
 		if (chdir(docroot) != SUCCESS) {
-			ONION_ERROR("could not change into %s\n", docroot);
+			ONION_ERROR("could not change into %s", docroot);
 			free(docroot);
 			goto quit;
 		}
 		free(docroot);
+	}
+	
+	if (cert || key) {
+		if (!cert) {
+			ONION_ERROR("the SSL certificate is not set for %s", key);	
+			free(key);
+			goto quit;
+		} else if (!key) {
+			ONION_ERROR("the SSL key is not set for %s", cert);	
+			free(cert);
+			goto quit;
+		}
 	}
 	
 	ponion->ini_defaults = ponion_ini_defaults;
@@ -686,6 +718,13 @@ ponion_enter:
 #endif
 
 		o=onion_new(O_POOL|O_THREADED);
+		
+		if (cert && key) {
+			onion_set_certificate(
+				o, O_SSL_CERTIFICATE_KEY, cert, key, O_SSL_NONE);
+			free(cert);
+			free(key);	
+		}
 		
 		onion_set_max_threads(o, threads);
 		
