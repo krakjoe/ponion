@@ -138,25 +138,20 @@ static void ponion_build_query(void *context, const char *key, const char *value
 	size_t lengths[3] = {
 		strlen(key), 
 		strlen(value),
-		lengths[0]+lengths[1]+1};
-	char *pointer = NULL;
+		lengths[0]+lengths[1]};
 	
 	if (!string->len) {
-		string->str = malloc(lengths[2]+1);
-	} else string->str = realloc(string->str, string->len + lengths[2]+2);
-	
-	pointer = &string->str[string->len];
-	
-	if (string->len) {
-		memcpy(
-			pointer++, "&", sizeof("&")-1);
+		string->str = malloc(lengths[2]+2);
+		sprintf(
+			string->str, "%s=%s\0", key, value);
+	} else {
+		string->str = realloc(
+			string->str, string->len + lengths[2]+4);
+		sprintf(
+			&string->str[string->len], "&%s=%s\0", key, value);
 	}
 	
-	memcpy(pointer, key, lengths[0]);
-	memcpy(&pointer[lengths[0]], "=", (sizeof("=")-1));
-	memcpy(&pointer[lengths[0] + (sizeof("=")-1)], value, lengths[1]);
-	
-	string->len += strlen(pointer);
+	string->len = strlen(string->str);
 }
 
 int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) { /* {{{ */
@@ -326,6 +321,11 @@ static char* php_sapi_ponion_read_cookies(TSRMLS_D) /* {{{ */
 	return NULL;
 } /* }}} */
 
+static int php_sapi_ponion_read_post(char *buffer, uint length TSRMLS_DC) /* {{{ */
+{
+	return 0;
+} /* }}} */
+
 static int php_sapi_ponion_header_handler(sapi_header_struct *h, sapi_header_op_enum op, sapi_headers_struct *s TSRMLS_DC) /* {{{ */
 {
 	return 0;
@@ -447,7 +447,7 @@ static sapi_module_struct ponion_sapi_module = {
 	php_sapi_ponion_send_headers,   /* send headers handler */
 	NULL,    /* send header handler */
 
-	NULL,                           /* read POST data */
+	php_sapi_ponion_read_post,      /* read POST data */
 	php_sapi_ponion_read_cookies,   /* read Cookies */
 
 	php_sapi_ponion_register_vars,  /* register server variables */
