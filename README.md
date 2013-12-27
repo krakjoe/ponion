@@ -41,4 +41,4 @@ Time per request:       7.511 [ms] (mean)
 Time per request:       1.502 [ms] (mean, across all concurrent requests)
 ```
 
-Above is a twitter/bootstrap based bare minimum Silex application using twig based templates, Apache (nts) got to around 35
+Above is a twitter/bootstrap based bare minimum Silex application using twig based templates, Apache (nts) got to around 350
