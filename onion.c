@@ -24,11 +24,19 @@
 #include <onion/log.h>
 #include <signal.h>
 #include <netdb.h>
-#include <ext/standard/php_smart_str.h>
+#include <ext/spl/spl_iterators.h>
+#include <Zend/zend_interfaces.h>
 
 ZEND_DECLARE_MODULE_GLOBALS(ponion);
 
-static onion *o=NULL;
+static onion *o = NULL;
+static zend_class_entry *onion_object_entry = NULL,
+                        *onion_query_entry = NULL,
+                        *onion_post_entry = NULL,
+                        *onion_files_entry = NULL,
+                        *onion_cookies_entry = NULL;
+static zend_object_handlers onion_handlers,
+                            *zend_handlers = NULL;
 
 typedef struct _onion_context_t {
 	onion_request *req;
@@ -269,9 +277,9 @@ int onion_request_handler(void *p, onion_request *req, onion_response *res){ /* 
 			case 500:
 				return OCS_INTERNAL_ERROR;
 			
-			default: 
+			default:
 				return OCS_PROCESSED;
-		}	
+		}
 	}
 	
 	return OCS_NOT_PROCESSED;
@@ -283,11 +291,29 @@ int onion_error_handler(void *p, onion_request *req, onion_response *res) { /* {
 } /* }}} */
 
 /* {{{ */
+#include <classes/query.h>
+#include <classes/post.h> /* }}} */
+
+static PHP_MINIT_FUNCTION(ponion) { /* {{{ */
+	zend_class_entry qe, pe;
+	
+	INIT_CLASS_ENTRY(qe, "OnionQuery", onion_query_methods);
+	onion_query_entry = zend_register_internal_class(&qe TSRMLS_CC);
+	zend_class_implements(onion_query_entry TSRMLS_CC, 1, spl_ce_ArrayAccess);
+	
+	INIT_CLASS_ENTRY(pe, "OnionPost", onion_post_methods);
+	onion_post_entry = zend_register_internal_class(&pe TSRMLS_CC);
+	zend_class_implements(onion_post_entry TSRMLS_CC, 1, spl_ce_ArrayAccess);
+	
+	return SUCCESS;
+} /* }}} */
+
+/* {{{ */
 static zend_module_entry ponion_sapi_zend_module = {
 	STANDARD_MODULE_HEADER,
 	PONION_NAME,
 	NULL,
-	NULL, // minit
+	PHP_MINIT(ponion), // minit
 	NULL,
 	NULL, // rinit
 	NULL,
