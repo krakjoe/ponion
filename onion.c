@@ -15,6 +15,9 @@
    | Authors: Joe Watkins <joe.watkins@live.co.uk>                        |
    +----------------------------------------------------------------------+
 */
+#include <pwd.h>
+#include <grp.h>
+#include <unistd.h>
 #include <ponion.h>
 #include <onion/onion.h>
 #include <onion/handlers/exportlocal.h>
@@ -29,23 +32,27 @@
 
 ZEND_DECLARE_MODULE_GLOBALS(ponion);
 
+typedef struct _ponion_string_t {
+	size_t len;
+	char *str;
+} ponion_string_t;
+
+typedef struct _ponion_context_t {
+	onion_request *req;
+	onion_response *res;
+} ponion_context_t;
+
 static onion *o = NULL;
-static zend_class_entry *onion_object_entry = NULL,
-                        *onion_query_entry = NULL,
-                        *onion_post_entry = NULL,
-                        *onion_headers_entry = NULL,
-                        *onion_files_entry = NULL;
+static zend_class_entry *OnionQuery_ce = NULL,
+                        *OnionPost_ce = NULL,
+                        *OnionHeaders_ce = NULL,
+                        *OnionFiles_ce = NULL;
 static zend_object_handlers onion_handlers,
                             *zend_handlers = NULL;
 
-typedef struct _onion_context_t {
-	onion_request *req;
-	onion_response *res;
-} onion_context_t;
-
 static inline int ponion_ub_write(const char *message, unsigned int length TSRMLS_DC) /* {{{ */
 {
-	onion_context_t *context = (onion_context_t*) SG(server_context);
+	ponion_context_t *context = (ponion_context_t*) SG(server_context);
 	if (context) {
 		if (onion_response_write(context->res, message, length))
 			return SUCCESS;	
@@ -62,13 +69,13 @@ static inline void ponion_flush(void *context)  /* {{{ */
 {
 #endif
 
-	onion_context_t *ctx = (onion_context_t*) context;
+	ponion_context_t *ctx = (ponion_context_t*) context;
 	if (ctx) {
 		onion_response_flush(ctx->res);	
 	}
 } /* }}} */
 
-char *ponion_translate_path(const char *path TSRMLS_DC) { /* {{{ */
+char *ponion_path_tostring(const char *path TSRMLS_DC) { /* {{{ */
 	char *translated = NULL;
 	
 	if (path && *path) {
@@ -92,7 +99,7 @@ char *ponion_translate_path(const char *path TSRMLS_DC) { /* {{{ */
 		struct stat sb;
 		
 		if (stat("index.php", &sb) == SUCCESS) {
-			translated = "index.php";
+			translated = strdup("index.php");
 		}
 	}
 	
@@ -105,7 +112,7 @@ char *ponion_translate_path(const char *path TSRMLS_DC) { /* {{{ */
 	return translated;
 } /* }}} */
 
-static inline char *ponion_init_method(onion_request_flags flags TSRMLS_DC) { /* {{{ */
+static inline char *ponion_method_tostring(onion_request_flags flags TSRMLS_DC) { /* {{{ */
 
 	switch (flags & OR_METHODS) {
 		case OR_GET:
@@ -136,12 +143,7 @@ static inline char *ponion_init_method(onion_request_flags flags TSRMLS_DC) { /*
 	}
 } /* }}} */
 
-typedef struct _ponion_string_t {
-	size_t len;
-	char *str;
-} ponion_string_t;
-
-static void ponion_build_query(void *context, const char *key, const char *value, int flags) {
+static void ponion_dict_tostring(void *context, const char *key, const char *value, int flags) {
 	ponion_string_t *string = (ponion_string_t*) context;
 	size_t lengths[3] = {
 		strlen(key), 
@@ -164,42 +166,43 @@ static void ponion_build_query(void *context, const char *key, const char *value
 
 int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) { /* {{{ */
 
-	const char *path = onion_request_get_path(req), 
-	           *path_translated = NULL;
+	const char *path = onion_request_get_path(req);
+	      char *path_translated = NULL;
 	const char *buffer = NULL;
 	onion_request_flags flags;
 	
-	path_translated = ponion_translate_path(path TSRMLS_CC);
-	if (!path_translated) {
+	path_translated = ponion_path_tostring(path TSRMLS_CC);
+	if (!path_translated || !*path_translated) {
 		return FAILURE;
 	}
 	
 	flags = onion_request_get_flags(req);
 
-	SG(request_info).request_method = ponion_init_method(flags TSRMLS_CC);
-	SG(request_info).auth_user = NULL;
-	SG(request_info).auth_password = NULL;
-	SG(request_info).auth_digest = NULL;	
+	SG(request_info).request_method = ponion_method_tostring(flags TSRMLS_CC);
 
-	{
-		ponion_string_t buffer = {0, NULL};
-		onion_dict_preorder(
-			req->GET,
-			ponion_build_query,
-			&buffer);
-		if (buffer.len) {
-			SG(request_info).query_string = estrndup(
-				buffer.str, buffer.len);
-			free(buffer.str);
-		} else SG(request_info).query_string = NULL;
-	}
-	
-	if (SG(request_info).request_method && 
-		path_translated && *path_translated) {
+	if (SG(request_info).request_method) {
 		SG(sapi_headers).http_response_code = 200;
 		SG(request_info).request_uri = estrdup(path);
 		SG(request_info).path_translated = estrdup(path_translated);
+		free(path_translated);
+		
+		SG(request_info).auth_user = NULL;
+		SG(request_info).auth_password = NULL;
+		SG(request_info).auth_digest = NULL;	
 
+		{
+			ponion_string_t buffer = {0, NULL};
+			onion_dict_preorder(
+				onion_request_get_query_dict(req),
+				ponion_dict_tostring,
+				&buffer);
+			if (buffer.len) {
+				SG(request_info).query_string = estrndup(
+					buffer.str, buffer.len);
+				free(buffer.str);
+			} else SG(request_info).query_string = NULL;
+		}
+		
 		buffer = onion_request_get_header(req, "content-type");
 		if (buffer) {
 			SG(request_info).content_type = estrdup(buffer);
@@ -213,30 +216,30 @@ int ponion_init_request(onion_request *req, onion_response *res TSRMLS_DC) { /* 
 		} else {
 			SG(request_info).content_length = 0;
 		}
+		
 	} else {
-		SG(request_info).path_translated = NULL;
 		SG(sapi_headers).http_response_code = 500;
+		free(path_translated);
 	}
-
+	
 	if (SG(sapi_headers).http_response_code != 200) {
 		onion_response_set_code(res, SG(sapi_headers).http_response_code);
-		onion_response_write0(
-			res,"Error Occured");
+		onion_response_write0(res,"Error Occured");
 		return FAILURE;
 	}
 	
 	{
-		SG(server_context) = (onion_context_t*) emalloc(
-			sizeof(onion_context_t));
+		SG(server_context) = (ponion_context_t*) emalloc(
+			sizeof(ponion_context_t));
 		
-		((onion_context_t*)SG(server_context))->req = req;
-		((onion_context_t*)SG(server_context))->res = res;
+		((ponion_context_t*)SG(server_context))->req = req;
+		((ponion_context_t*)SG(server_context))->res = res;
 	}
 	
 	return SUCCESS;
 } /* }}} */
 
-int onion_request_handler(void *p, onion_request *req, onion_response *res){ /* {{{ */
+int ponion_request_handler(void *p, onion_request *req, onion_response *res){ /* {{{ */
 	TSRMLS_FETCH();
 	int status = 200;
 	
@@ -285,7 +288,7 @@ int onion_request_handler(void *p, onion_request *req, onion_response *res){ /* 
 	return OCS_NOT_PROCESSED;
 } /* }}} */
 
-int onion_error_handler(void *p, onion_request *req, onion_response *res) { /* {{{ */
+int ponion_error_handler(void *p, onion_request *req, onion_response *res) { /* {{{ */
 	onion_response_write0(res,"Error world");
 	return OCS_PROCESSED;
 } /* }}} */
@@ -299,16 +302,16 @@ static PHP_MINIT_FUNCTION(ponion) { /* {{{ */
 	zend_class_entry qe, pe, he;
 	
 	INIT_CLASS_ENTRY(qe, "OnionQuery", onion_query_methods);
-	onion_query_entry = zend_register_internal_class(&qe TSRMLS_CC);
-	zend_class_implements(onion_query_entry TSRMLS_CC, 1, spl_ce_ArrayAccess);
+	OnionQuery_ce = zend_register_internal_class(&qe TSRMLS_CC);
+	zend_class_implements(OnionQuery_ce TSRMLS_CC, 1, spl_ce_ArrayAccess);
 	
 	INIT_CLASS_ENTRY(pe, "OnionPost", onion_post_methods);
-	onion_post_entry = zend_register_internal_class(&pe TSRMLS_CC);
-	zend_class_implements(onion_post_entry TSRMLS_CC, 1, spl_ce_ArrayAccess);
+	OnionPost_ce = zend_register_internal_class(&pe TSRMLS_CC);
+	zend_class_implements(OnionPost_ce TSRMLS_CC, 1, spl_ce_ArrayAccess);
 	
 	INIT_CLASS_ENTRY(he, "OnionHeaders", onion_headers_methods);
-	onion_headers_entry = zend_register_internal_class(&he TSRMLS_CC);
-	zend_class_implements(onion_headers_entry TSRMLS_CC, 1, spl_ce_ArrayAccess);
+	OnionHeaders_ce = zend_register_internal_class(&he TSRMLS_CC);
+	zend_class_implements(OnionHeaders_ce TSRMLS_CC, 1, spl_ce_ArrayAccess);
 	
 	return SUCCESS;
 } /* }}} */
@@ -365,7 +368,7 @@ static int php_sapi_ponion_header_handler(sapi_header_struct *h, sapi_header_op_
 
 static int php_sapi_ponion_send_headers(sapi_headers_struct *sapi_headers TSRMLS_DC) /* {{{ */
 {
-	onion_context_t *context = (onion_context_t*) SG(server_context);
+	ponion_context_t *context = (ponion_context_t*) SG(server_context);
 	
 	onion_response_set_code(
 		context->res, sapi_headers->http_response_code);
@@ -412,7 +415,7 @@ static void php_sapi_ponion_register_vars(zval *track_vars_array TSRMLS_DC) /* {
 	char   docroot[MAXPATHLEN], 
 		   *path = NULL, *query = NULL;
 	
-	onion_context_t *context = SG(server_context);
+	ponion_context_t *context = SG(server_context);
 	
 	php_import_environment_variables(track_vars_array TSRMLS_CC);
 	
@@ -461,7 +464,7 @@ static sapi_module_struct ponion_sapi_module = {
 	"ponion",                       /* name */
 	"ponion",                       /* pretty name */
 
-	php_ponion_module_startup, /* startup */
+	php_ponion_module_startup,      /* startup */
 	php_module_shutdown_wrapper,    /* shutdown */
 
 	NULL,                           /* activate */
@@ -502,6 +505,8 @@ const opt_struct OPTIONS[] = { /* {{{ */
 	{'T', 1, "set the maximum number of threads, -T16"},
 	{'K', 1, "set the SSL key, -K/path/to/cert.key"},
 	{'C', 1, "set the SSL certification, -C/path/to/cert.pem"},
+	{'U', 1, "set the username to use, -Uweb"},
+	{'G', 1, "set the group to use, -Gweb"},
 	{'-', 0, NULL}
 }; /* }}} */
 
@@ -528,36 +533,11 @@ void ponion_ini_defaults(HashTable *configuration_hash) /* {{{ */
 	INI_DEFAULT("report_zend_debug", "0");
 } /* }}} */
 
-#ifdef ZEND_SIGNALS
-static void shutdown_server(int _){
-#else
-static void shutdown_server(int _){
-#endif
-	TSRMLS_FETCH();
-	
-	if (ponion_sapi_module.ini_entries) {
-		free(ponion_sapi_module.ini_entries);
-	}
+static void shutdown_server(int _){ /* {{{ */
+	zend_bailout();
+} /* }}} */
 
-	if (ponion_sapi_module.php_ini_path_override) {
-		free(ponion_sapi_module.php_ini_path_override);
-	}
-
-#ifdef ZEND_SIGNALS
-	zend_try {
-		zend_signal_deactivate(TSRMLS_C);
-	} zend_end_try();
-#endif
-
-	sapi_shutdown();
-	
-	if (o) 
-		onion_listen_stop(o);
-
-	tsrm_shutdown();
-}
-
-static inline void ponion_help(TSRMLS_D) {
+static inline void ponion_help(TSRMLS_D) { /* {{{ */
 	const opt_struct *opt = OPTIONS;
 	
 	printf(
@@ -581,9 +561,9 @@ static inline void ponion_help(TSRMLS_D) {
 	}
 done:
 	return;
-}
+} /* }}} */
 
-int main(int argc, char **argv){
+int main(int argc, char **argv) { /* {{{ */
 	sapi_module_struct *ponion = &ponion_sapi_module;
 	char *ini_entries;
 	int   ini_entries_len;
@@ -600,7 +580,9 @@ int main(int argc, char **argv){
 	     *address,
 	     *docroot,
 	     *cert,
-	     *key;
+	     *key,
+	     *user,
+	     *grp;
 	void ***tsrm_ls;
 
 #ifdef PHP_WIN32
@@ -631,6 +613,8 @@ ponion_enter:
 	docroot = NULL;
 	cert = NULL;
 	key = NULL;
+	user = NULL;
+	grp = NULL;
 	
 	while ((opt = php_getopt(argc, argv, OPTIONS, &php_optarg, &php_optind, 0, 2)) != -1) {
 		switch (opt) {
@@ -726,6 +710,20 @@ ponion_enter:
 					free(cert);
 				}
 				cert = strdup(php_optarg);
+			break;
+			
+			case 'U':
+				if (user) {
+					free(user);
+				}
+				user = strdup(php_optarg);
+			break;
+			
+			case 'G':
+				if (grp) {
+					free(grp);
+				}
+				grp = strdup(php_optarg);
 			break;
 		}
 	}
@@ -827,14 +825,8 @@ ponion_enter:
 #endif
 #endif
 
+		ONION_INFO("Starting ponion on %s:%s, %d Threads", address, port, threads);
 		o=onion_new(O_POLL|O_POOL|O_THREADED);
-		
-		if (cert && key) {
-			onion_set_certificate(
-				o, O_SSL_CERTIFICATE_KEY, cert, key, O_SSL_NONE);
-			free(cert);
-			free(key);	
-		}
 		
 		onion_set_max_threads(o, threads);
 		
@@ -846,30 +838,86 @@ ponion_enter:
 		onion_set_hostname(o, address);
 		free(address);
 		
-		{
-			onion_handler *ponion_error_handler = onion_handler_new(onion_error_handler, o, NULL);
+		if (user ) {
+			struct group *g = NULL;
+			struct passwd *pwd = getpwnam(user);
 			
-			if (ponion_error_handler) {
-				onion_set_internal_error_handler(o, ponion_error_handler);
-			}
-		}
-		
-		{
-			onion_handler *ponion_handler = onion_handler_new(onion_request_handler, o, NULL);
-			
-			if (ponion_handler) {
-				onion_handler_add(
-					ponion_handler, onion_handler_export_local_new("."));
+			if (pwd) {
+				g = (!grp) ?
+						getgrgid(pwd->pw_gid) : 
+						getgrnam(grp);
+				if (g &&
+					g->gr_gid != getgid()) {
+					ONION_INFO("Setting group for process \"%s\"", g->gr_name);
+					setgid(g->gr_gid);
+				}
 				
-				onion_set_root_handler(o, ponion_handler);
+				if (getuid() != pwd->pw_uid) {
+					ONION_INFO("Setting username for process \"%s\"", user);
+					setuid(pwd->pw_uid);
+				}
+			} else {
+				ONION_WARNING("Couldn't find username \"%s\"", user);
 			}
+			
+			free(user);
+			if (grp)
+				free(grp);
 		}
 		
-		onion_listen(o);
+		if (cert && key) {
+			ONION_INFO("Setting SSL certificate/key \"%s/%s\"", cert, key);
+			onion_set_certificate(
+				o, O_SSL_CERTIFICATE_KEY, cert, key, O_SSL_NONE);
+			free(cert);
+			free(key);	
+		}
+		
+		{
+			onion_handler *handlers[3] = {
+				onion_handler_new(ponion_error_handler, o, NULL),
+				onion_handler_new(ponion_request_handler, o, NULL),
+				onion_handler_export_local_new(".")
+			};
+			
+			onion_set_internal_error_handler(o, handlers[0]);
+			onion_handler_add(
+				handlers[1], handlers[2]);
+			onion_set_root_handler(o, handlers[1]);
+		}
+		
+		zend_first_try {
+			ONION_INFO("Listening for connections ...");
+			onion_listen(o);
+		} zend_catch {
+			ONION_WARNING("Shutting down server ...");
+			
+			if (o) {
+				onion_listen_stop(o);
+			}
+			
+			if (ponion_sapi_module.ini_entries) {
+				free(ponion_sapi_module.ini_entries);
+			}
+
+			if (ponion_sapi_module.php_ini_path_override) {
+				free(ponion_sapi_module.php_ini_path_override);
+			}
+
+#ifdef ZEND_SIGNALS
+			zend_try {
+				zend_signal_deactivate(TSRMLS_C);
+			} zend_end_try();
+#endif
+
+			sapi_shutdown();
+			
+		} zend_end_try();
 	}
 
 quit:
 	tsrm_shutdown();
 
 	return 0;
-}
+} /* }}} */
+

@@ -35,7 +35,7 @@ ZEND_END_ARG_INFO()
 static PHP_METHOD(OnionHeaders, offsetGet) {
 	char *key;
 	zend_uint key_len;
-	onion_context_t *context = (onion_context_t*) SG(server_context);
+	ponion_context_t *context = (ponion_context_t*) SG(server_context);
 	
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &key, &key_len) == FAILURE) {
 		return;
@@ -52,7 +52,7 @@ static PHP_METHOD(OnionHeaders, offsetGet) {
 static PHP_METHOD(OnionHeaders, offsetSet) {
 	char *key;
 	zend_uint key_len;
-	onion_context_t *context = (onion_context_t*) SG(server_context);
+	ponion_context_t *context = (ponion_context_t*) SG(server_context);
 	
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &key, &key_len) == FAILURE) {
 		return;
@@ -64,7 +64,7 @@ static PHP_METHOD(OnionHeaders, offsetSet) {
 static PHP_METHOD(OnionHeaders, offsetExists) {
 	char *key;
 	zend_uint key_len;
-	onion_context_t *context = (onion_context_t*) SG(server_context);
+	ponion_context_t *context = (ponion_context_t*) SG(server_context);
 	
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &key, &key_len) == FAILURE) {
 		return;
@@ -82,7 +82,7 @@ static PHP_METHOD(OnionHeaders, offsetExists) {
 static PHP_METHOD(OnionHeaders, offsetUnset) {
 	char *key;
 	zend_uint key_len;
-	onion_context_t *context = (onion_context_t*) SG(server_context);
+	ponion_context_t *context = (ponion_context_t*) SG(server_context);
 	
 	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s", &key, &key_len) == FAILURE) {
 		return;
