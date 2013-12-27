@@ -33,8 +33,8 @@ static onion *o = NULL;
 static zend_class_entry *onion_object_entry = NULL,
                         *onion_query_entry = NULL,
                         *onion_post_entry = NULL,
-                        *onion_files_entry = NULL,
-                        *onion_cookies_entry = NULL;
+                        *onion_headers_entry = NULL,
+                        *onion_files_entry = NULL;
 static zend_object_handlers onion_handlers,
                             *zend_handlers = NULL;
 
@@ -295,7 +295,7 @@ int onion_error_handler(void *p, onion_request *req, onion_response *res) { /* {
 #include <classes/post.h> /* }}} */
 
 static PHP_MINIT_FUNCTION(ponion) { /* {{{ */
-	zend_class_entry qe, pe;
+	zend_class_entry qe, pe, he;
 	
 	INIT_CLASS_ENTRY(qe, "OnionQuery", onion_query_methods);
 	onion_query_entry = zend_register_internal_class(&qe TSRMLS_CC);
@@ -304,6 +304,10 @@ static PHP_MINIT_FUNCTION(ponion) { /* {{{ */
 	INIT_CLASS_ENTRY(pe, "OnionPost", onion_post_methods);
 	onion_post_entry = zend_register_internal_class(&pe TSRMLS_CC);
 	zend_class_implements(onion_post_entry TSRMLS_CC, 1, spl_ce_ArrayAccess);
+	
+	INIT_CLASS_ENTRY(he, "OnionHeaders", onion_headers_methods);
+	onion_headers_entry = zend_register_internal_class(&he TSRMLS_CC);
+	zend_class_implements(onion_headers_entry TSRMLS_CC, 1, spl_ce_ArrayAccess);
 	
 	return SUCCESS;
 } /* }}} */
