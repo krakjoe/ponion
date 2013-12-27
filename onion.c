@@ -292,7 +292,8 @@ int onion_error_handler(void *p, onion_request *req, onion_response *res) { /* {
 
 /* {{{ */
 #include <classes/query.h>
-#include <classes/post.h> /* }}} */
+#include <classes/post.h> 
+#include <classes/headers.h> /* }}} */
 
 static PHP_MINIT_FUNCTION(ponion) { /* {{{ */
 	zend_class_entry qe, pe, he;
