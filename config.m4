@@ -24,7 +24,7 @@ if test "$PHP_ONION" != "no"; then
   AC_DEFINE(HAVE_ONION,1,[Whether to compile the onion server])
   
   PHP_ONION_CFLAGS="-DGNU_SOURCE -I$ONION_INCLUDE"
-  PHP_ONION_FILES="onion.c"
+  PHP_ONION_FILES="ponion_sapi.c ponion_utils.c onion.c"
   PHP_ONION_LIBS="-lpthread -lonion -lonion_handlers"
   
   PHP_SUBST(PHP_ONION_CFLAGS)
@@ -34,7 +34,7 @@ if test "$PHP_ONION" != "no"; then
   PHP_ADD_MAKEFILE_FRAGMENT([$abs_srcdir/sapi/onion/Makefile.frag])
   
   PHP_ADD_INCLUDE(ONION_INCLUDE)
-  PHP_SELECT_SAPI(onion, program, "onion.c", $PHP_ONION_CFLAGS, [$(SAPI_ONION_PATH)])
+  PHP_SELECT_SAPI(onion, program, $PHP_ONION_FILES, $PHP_ONION_CFLAGS, [$(SAPI_ONION_PATH)])
   
   BUILD_BINARY_ONION="sapi/onion/php-onion"
   BUILD_ONION="\$(LIBTOOL) --mode=link \

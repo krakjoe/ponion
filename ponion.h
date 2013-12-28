@@ -35,8 +35,10 @@
 #include "zend_modules.h"
 #include "zend_globals.h"
 #include "zend_ini_scanner.h"
+#include "zend_interfaces.h"
 #include "zend_stream.h"
 #include "SAPI.h"
+#include "ext/spl/spl_iterators.h"
 
 #if defined(_WIN32) && !defined(__MINGW32__)
 # include <windows.h>
